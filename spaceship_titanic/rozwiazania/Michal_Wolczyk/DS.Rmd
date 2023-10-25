@@ -1,0 +1,406 @@
+---
+title: "KÓŁKO_DS"
+output:
+  pdf_document: default
+  html_document: default
+date: "2023-10-19"
+---
+```{r, echo = FALSE}
+library(knitr)
+library(ggplot2)
+```
+Poniżej przedstawiam najbardziej interesujące statystyki, które udało mi się znaleźć
+w zbiorze danych "spaceship_titanic" oraz moją analizę.
+
+## TRASY
+
+Na samym początku zobaczmy, że nasi pasażerowie podróżowali z trzech różncyh planet (Ziemia, Europa, Mars) na trzy możliwe (TRAPPIST-1e, PSO J318.5-22,	
+55 Cancri e)
+
+
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+library(dplyr)
+library(stringi)
+df <-read.csv("dane.csv")
+df <- df %>%
+  mutate( Wypadek = as.integer(as.logical(df$Transported))) %>%
+  mutate(czy_vip = as.integer(as.logical(df$VIP))) %>%
+  mutate(czy_Cryo = as.integer(as.logical(df$CryoSleep))) %>% replace(is.na(.), 0) %>%
+  mutate(wydatki= RoomService + FoodCourt + ShoppingMall + Spa + VRDeck ) %>%
+  mutate(czy_Ziemia = 0) %>%
+  mutate(czy_Ziemia = ifelse(HomePlanet=='Earth',1,czy_Ziemia)) %>%
+  mutate(czy_Europa = 0) %>%
+  mutate(czy_Europa = ifelse(HomePlanet=='Europa',1,czy_Europa)) %>%
+  mutate(czy_Mars = 0) %>%
+  mutate(czy_Mars = ifelse(HomePlanet=='Mars',1,czy_Mars)) %>%
+  mutate(Planeta = 0) %>%
+  mutate(Planeta = ifelse(HomePlanet=='Earth',1,Planeta)) %>%
+  mutate(Planeta = ifelse(HomePlanet=='Europa',2,Planeta)) %>%
+  mutate(Planeta = ifelse(HomePlanet=='Mars',3,Planeta)) 
+  
+df_f <- df[df$HomePlanet!="" & df$Destination!= "",]
+
+df2 <- df_f %>%
+  group_by(HomePlanet) %>%
+  summarise(mean(czy_Cryo),mean(Wypadek),mean(czy_vip))
+df3<- df_f %>% mutate(TRASA = paste(df_f$HomePlanet,df_f$Destination, sep ="-"))
+t_3 <-table(df3$TRASA)
+barplot(t_3,cex.names = 0.5,angle = 1,las=2)
+```
+
+
+
+Na wykresie najczęściej uczęszczaną trasą była trasa z Ziemii na planetę Trappist 1e, na drugim miejscu najpopularniejsza była trasa z marsa też na planetę 
+Trappist 1e. Zobaczmy teraz czy któraś z tych tras wyrózniała się na tle bezpiecznego przelotu
+
+
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+
+Wypadki_Trasa <- df3 %>%
+  group_by(TRASA) %>%
+  summarise(count = n(),
+            procent_transportowania = mean(Wypadek, na.rm = TRUE)) %>%
+  arrange(desc(procent_transportowania))
+select(Wypadki_Trasa,TRASA,procent_transportowania)
+```
+Jak widać w tabeli do największej liczby przetransportowań do innego wymiaru dochodziło na trasach z europy, najniebezpieczniejszą z nich była trasa Europa-PSO J318.5-22.
+Przeanalizujmy teraz jak planeta  z której pasażerowie odlatywali miała wpływ na inne statystyki, zacznijmy od tego żeby zobaczyć ile pasażerów wyleciało z której planety i ilu z nich zostało przetransportowanych do innego wymiaru, widać to na wykresie.
+
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+df2 <- df_f %>%
+  group_by(HomePlanet) %>%
+  summarise(mean(czy_Cryo),wyp = mean(Wypadek),mean(czy_vip),count = n())
+
+  t_4 <- prop.table(table(df_f$Wypadek, df_f$HomePlanet))
+  barplot(t_4,
+          col = c('Blue','Red'),
+          legend = TRUE,
+          legend.text = c('Nieprzetransportowani','Przetransportowani'),
+          main = "Liczność pasażerów z poszczególnych planet")
+
+```
+
+Najwięcej ludzi wylatywało z Ziemi, ale największy procent (około 66%) przetransportowanych do innego wymiaru był z Europy. Teraz możemy zauważyć inną ciekawą zależność mędzy planetami wylotu a tym czy pasażerowie zdecydowali się kupić usługę VIP.
+
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+df1<- df_f %>% 
+  group_by(HomePlanet) %>%
+  summarise(ile_vipów= sum(czy_vip, na.rm = TRUE),
+            cryos = mean(czy_Cryo, na.rm = TRUE),
+            wydatki = mean(wydatki), 
+            na_pokoje = mean(RoomService),
+            na_jedzenie = mean(FoodCourt),
+            na_zakupy = mean(ShoppingMall),
+            na_SPA = mean(Spa),
+            na_VR= mean(VRDeck))
+#ten zbiór zrobiłem dla siebie żeby łątwo porównać wydatki i różne cechy mieszkańców poszczególnych planet, będę tu robił ich więcej bo dla mnie jest to szybki sposób zdobycia informacji o zbiorze
+select(df1,HomePlanet,ile_vipów)
+
+
+```
+
+Jak widać w tabeli żaden mieszkaniec Ziemi nie zdecydował się na zakup usługi VIP, a z Europy poleciało prawie dwa razy więcej vipów niż z Marsa. Teraz spójrzmy na co wydawali pieniądze pasażerowie z różnych planet.
+
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+df_f_p <- df_f[df_f$wydatki>0,]
+qplot(data = df_f,x = HomePlanet,y = wydatki, geom = 'boxplot', main = 'Wydatki wszystkich')
+```
+
+Widać że przez kilka osób które wydało znacznie więcej od innych wykres jest mało czytelny ale widzimy że to mieszkańcy Europy zdecydowanie wydali najwięcej pieniędzy.
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+df_f_biedni <- df_f[df_f$wydatki<10000,]
+qplot(data = df_f_biedni,x = HomePlanet,y = wydatki, geom = 'boxplot', main ='Wydatki mniejwydających')
+
+df_f_bogaci <- df_f[df_f$wydatki>=10000,]
+```
+
+Po usunięciu najbogatszych (176 Europejczyków co stanowi około 10 procent wszystkich Europejczyków i jednego Marsjanina) to wciąż Europejczycy tryumfują jeśli chodzi o wydawanie pieniędzy i mają znacznie wyższą średnią, stąd można wysnuć wniosek że w Europie się całkiem powodzi. Zobaczmy jeszcze w jakim stopniu ci najbogatsi pasażerowie byli transportowani do innego wymiaru.
+
+```{r}
+mean(df_f_bogaci$Wypadek)
+mean(df$Wypadek)
+```
+
+Jak widać tylko 30% pasażerów wydających > 10000 uległo przetransportowaniu do innego wymiaru, teraz spójrzmy jak w poszczególnych kategoriach wydatków różniły się planety pochodzenia płacących.
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+qplot(data = df_f,x = HomePlanet,y = RoomService, geom = 'boxplot', main = 'Wydatki na room service',ylim = c(0,1000))
+select(df1,HomePlanet,na_pokoje)
+qplot(data = df_f,x = HomePlanet,y = FoodCourt, geom = 'boxplot', main = 'Wydatki na Jedzenie w food courcie',ylim = c(0,2000))
+select(df1,HomePlanet,na_jedzenie)
+qplot(data = df_f,x = HomePlanet,y = ShoppingMall, geom = 'boxplot', main = 'Wydatki na Zakupy',ylim = c(0,1000))
+select(df1,HomePlanet,na_zakupy)
+qplot(data = df_f,x = HomePlanet,y = Spa, geom = 'boxplot', main = 'Wydatki na SPA',ylim = c(0,1000))
+select(df1,HomePlanet,na_SPA)
+qplot(data = df_f,x = HomePlanet,y = VRDeck, geom = 'boxplot', main = 'Wydatki na VR',ylim = c(0,1000))
+select(df1,HomePlanet,na_VR)
+
+```
+
+Jak widać Europa przoduje (i to znacznie) w wydatkach na Jedzenie, SPA i VRDeck, zaś Mars przoduje w pozostałych, Ziemianie wydają znacząco mniej od mieszkańców pozostałych planet.
+
+## POKŁADY
+
+Możemy zauważyć że mieliśmy na naszym titanicu do wyboru 8 pokładów (A-G i pokład T), sprawdźmy więc jak to na jakim pokładzie znajdował się pasażer wpływało na to, czy zostanie przetransportowany czy nie.
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+df_f1 <- df[df$Cabin!= "",]
+
+df4 <- df_f1 %>%
+  mutate(Deck = stri_sub(df_f1$Cabin,1,1)) %>%
+  mutate(Sideboard = stri_sub(df_f1$Cabin,-1,-1))
+t_6 <- prop.table(table(df4$Wypadek, df4$Deck))
+barplot(t_6,
+          col = c('Blue','Red'),
+        legend.text = c("Nieprzetransportowani","Przetransportowani"),
+        args.legend = list(x='topleft'),
+          legend = TRUE, main = "Pokłady a przetransportowanie pasażera")
+```
+
+Na pokładach B i C był znacznie większy odsetek przetransportowanych osób,a na pokładach F i G było najwięcej pasażerów. Przyjrzyjmy się więc pokładom B i C.
+
+```{r }
+df4_C <- df4[df4$Deck=="C" & df4$HomePlanet!="",]
+df4_B <- df4[df4$Deck=="B" & df4$HomePlanet!="",]
+distinct(df4_B, HomePlanet)
+distinct(df4_C, HomePlanet)
+```
+
+Czyli widzimy, że na pokładach B i C byli tylko pasażerowie podróżujący z Europy, którzy częściej byli transportowani do innych wymiarów. Tłumaczy to też czemu pasażerowie z pokładów B i C wydawali najwięcej pieniędzy. Zobaczmy na pokłady na których najmniej pasażerów zostało przetransportowanych ( nie licząc pokładu T, który miał tylko 5 pasażerów i tylko jeden z nich został przetransportowany).
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+df4_DEF <- df4[df4$Deck == c('D','E','F') & df4$HomePlanet!= '',]
+t_6_DEF <- prop.table(table(df4_DEF$HomePlanet, df4_DEF$Deck))
+barplot(t_6_DEF,
+          col = c('Blue','Red',"Yellow"),
+          args.legend = list(x='topleft'),
+          legend = TRUE,main = "pokłady D, E i F a planety z których lecieli ich pasażerowie")
+```
+
+Na tych pokładach nie było aż tak dużo Europejczyków, tłumaczy to trochę czemu odsetek transportowanych jest tu niski jak i zarówno to czemu na pokładzie F gdzie europejczyków nie ma wogóle pasażerowie wydawali tam mniej pieniędzy. Teraz sprawdźmy jeszcze czy pokłady były symetryczne, czy niektóre miały więcej pokoi po danej stronie.
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+Strona <- df4 %>%
+  group_by(Sideboard) %>%
+  summarise(procent_transported = mean(Wypadek, na.rm = TRUE),
+            Vipy = mean(czy_vip, na.rm=TRUE),
+            cryos = mean(czy_Cryo, na.rm = TRUE),
+            mean(czy_Ziemia),
+            mean(czy_Europa),
+            mean(czy_Mars))
+t_7 <- prop.table(table(df4$Sideboard, df4$Deck))
+barplot(t_7,
+          col = c('Blue','Red'),
+          legend = TRUE,
+        legend.text = c('Lewa','Prawa'),
+        args.legend = list(x='topleft'),
+        main = 'Po której stronie znajduje się więcej podrużującyh z danego pokładu')
+
+```
+
+Okazuje się, że każdy pokład miał mniej więcej tyle samo pokoi po prawej stronie więc nasz statek był symetryczny.
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+Pokłady <- df4 %>%
+  group_by(Deck) %>%
+  summarise(count = n(),
+            procent_transported = mean(Wypadek, na.rm = TRUE),
+            vipy= mean(czy_vip, na.rm = TRUE),
+            cryos = mean(czy_Cryo, na.rm = TRUE),
+            wydatki = mean(wydatki), 
+            na_pokoje = mean(RoomService),
+            na_jedzenie = mean(FoodCourt),
+            na_zakupy = mean(ShoppingMall),
+            na_SPA = mean(Spa),
+            na_VR= mean(VRDeck),
+            mean(Age))
+
+LEWO_PRAWO <- df4 %>%
+  group_by(Deck,Sideboard) %>%
+  summarise(count=n())
+```
+
+## CRYOSLEEP
+
+Pierwsza rzecz jaka rzuca się w oczy to to, że pasażerowie którzy zdecydowali się na wprowadzenie w stan hibernacji o wiele częściej byli transportowani do innego wymiaru.
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+df_f2 <- df[df$CryoSleep!= "",]
+t_8 <-prop.table(table(df_f2$Transported, df_f2$CryoSleep))
+barplot(t_8,
+          col = c('Blue','Red'),
+          legend = TRUE,
+          legend.text = c("Nieprzetransportowani","Przetransportowani"),
+          main = 'Hibernacja a przetransportowanie do innego wymiaru',
+          names.arg = c("Nie poddani hibernacji","poddani hibernacji"))
+
+
+```
+
+Zobaczmy, jak pasażerowie z różnych planet decydowali się na hibernację:
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+df_f2_1<- df_f2[df_f2$HomePlanet!="",] 
+t_9 <-prop.table(table(df_f2_1$CryoSleep, df_f2_1$HomePlanet))
+barplot(t_9,
+          col = c('Blue','Red'),
+          legend = TRUE,
+          legend.text = c("Nie poddani hibernacji","Poddani hibernacji"),
+          main = 'Planeta pochodzenia a poddanie hibernacji')
+```
+
+Znowu widzimy że Europa ma większy odsetek, ale nie aż tak znacząco. Spróbujmy zobaczyć jak w pokładach ludzie ulegali hibernacji.
+
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+df4_cryo <- df4[df4$CryoSleep!="",]
+t_10 <- prop.table(table(df4_cryo$CryoSleep,df4_cryo$Deck))
+barplot(t_10,
+        col = c('Blue','Red'),
+        legend = TRUE,
+        args.legend = list(x='topleft'),
+        legend.text = c("Nie poddani hibernacji","Poddani hibernacji"),
+        main = 'Pokład a poddanie hibernacji')
+```
+
+Pamiętając że to D, E i F były jednymi z najbezpieczniejszych pokładów widzimy tego ewntualną przyczynę, mają one wszystkie mały odsetek ludzi poddanych hibernacji. A pokłady B i C mają całkiem spory, może to tłumaczyć nasze wyniki z poprzedniej części analizy.
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+df5 <- df_f2 %>%
+  group_by(CryoSleep) %>%
+  summarise(wiek = mean(Age, na.rm = TRUE),
+            vipy = mean(czy_vip, na.rm = TRUE),
+            wypadki = mean(Wypadek),
+            wydatki = mean(wydatki))
+```
+
+## GRUPY
+
+Teraz skupmy się na tym jak zachowywali się ludzie, którzy udali się w podróż w grupie.
+
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+df6 <- df %>%
+  mutate(grupa =  stri_sub(df$PassengerId,1,4),
+         numer = as.integer(stri_sub(df$PassengerId,6,7))) %>%
+  group_by(grupa) %>%
+  mutate(liczność_grupy = max(numer)) 
+t_11 <- prop.table(table(df6$Transported,df6$liczność_grupy))
+barplot(t_11,
+        col = c('Blue','Red'),
+        legend = TRUE,
+        args.legend = list(x='topright'),
+        legend.text = c("Nieprzetransportowani","Przetransportowani"),
+        main = 'Liczność grupy a procent przetransportowanych')
+```
+
+Z danych liczbowych wynika, że najmniej przetransportowanych pasażerów podróżowało w grupie 8 osobowej(jednak jest to mała grupa pasażeró bo zaledwie 8), potem samemu, a najwięcej w grupach 6- i 4-osobowych.
+Popatrzmy teraz na pary, czy ludzie podróżujący w parach częściej byli transportowani razem, czy może jednak osobno:
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+Pary <- df6[df6$liczność_grupy == 2,] %>%
+  group_by(grupa) %>%
+  summarise(ile_przetrwało = sum(Wypadek), ile_cryo = sum(czy_Cryo))
+hist(Pary$ile_przetrwało, xlab = 'ile osób w parze zostało przetransportowanych', main='transportowanie par do innych wymiarów')
+```
+Przypomina to mniej więcej rozkład normalny, jaki wynikałby gdyby prawdopodobieństwo przetransportowania nie zależałoby od tego czy druga osoba w parze została przetransportowana, dla porównania pokaże histogram 841*2 rzutów monetą
+
+```{r}
+rzuty <- data.frame(rzut1=round(runif(841,0,1),0),rzut2=round(runif(841,0,1),0))
+rzuty<- rzuty %>% 
+  mutate(wynik=rzut1+rzut2)
+hist(rzuty$wynik,main='suma dwóch rzutów monetą',xlab = 'suma rzutów monetą')
+```
+
+Widzimy że te dwa wykresy są całkiem do siebie podobne więc to że passażerowie podróżowali w parach nie wpływało na ich szansę na przetransportowanie, jednakże popatrzmy na pasażeró podróżujących w większych grupach
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+GRUPY <- df6 %>%
+  group_by(liczność_grupy)%>%
+  summarise(wypadki = mean(Wypadek, na.rm = TRUE),
+            count = n())
+GRUPY_3 <- df6[df6$liczność_grupy== 3,] %>%
+  group_by(grupa) %>%
+  summarise(ile_przetrwało = sum(Wypadek)/liczność_grupy,
+            ile_vipów = sum(czy_vip)/liczność_grupy,
+            ile_cryo = sum(czy_Cryo)/liczność_grupy) %>%
+  group_by(grupa) %>%
+  summarise(procent_przetrwania = mean(ile_przetrwało),
+            procent_vip = mean(ile_vipów),
+            procent_cryo = mean(ile_cryo))
+hist(GRUPY_3$procent_przetrwania, xlab = 'ile osób w trójce zostało przetransportowanych', main='transportowanie trójek do innych wymiarów')
+```
+
+Znowu dla porównania możemy zobaczyć jak ta cecha ułożyłaby się losowo
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+rzuty <- rzuty %>%
+  mutate(rzut3 = round(runif(841,0,1),0))%>%
+  mutate(wynik_3 = rzut1+rzut2+rzut3)
+hist(rzuty$wynik_3,main='Suma trzech rzutów monetą',xlab = 'Suma rzutów monetą')
+```
+
+Widzimy, już że tu wykresy trochę bardziej się różnią, co może sugerować że w trójkach, była większa szansa na całę grupowe przetransportowywanie i nie jest to losowa cecha. Sprawdźmy jeszcze jak to wygląda w czwórkach
+
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+GRUPY_4 <- df6[df6$liczność_grupy== 4,] %>%
+  group_by(grupa) %>%
+  summarise(ile_przetrwało = sum(Wypadek)/liczność_grupy,
+            ile_vipów = sum(czy_vip)/liczność_grupy,
+            ile_cryo = sum(czy_Cryo)/liczność_grupy) %>%
+  group_by(grupa) %>%
+  summarise(procent_przetrwania = mean(ile_przetrwało),
+            procent_vip = mean(ile_vipów),
+            procent_cryo = mean(ile_cryo))
+hist(GRUPY_4$procent_przetrwania, xlab = 'ile osób w czwórce zostało przetransportowanych', main='transportowanie czwórek do innych wymiarów')
+```
+
+Pokażmy jeszcze wykres losowego ułożenia tej cechy
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+rzuty <- rzuty %>%mutate(rzut4=round(runif(841,0,1),0))%>%
+  mutate(wynik_4=(rzut1+rzut2+rzut3+rzut4)/4)
+hist(rzuty$wynik_4,main='suma czterech rzutów monetą',xlab = 'suma rzutów monetą')
+```
+
+Zobaczmy, że tu różnica między wykresami jest największa i najczęściej 3 na 4 ludzi w grupie 4 osobowej było transportowanych do innego wymiaru, więc tutaj można stwierdzić że bycie w 4 osobowej grupie zwiększało szansę na przetransportowanie do innego wymiaru.
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+wydatki_wykres <- df[df$wydatki<1000,]
+hist(wydatki_wykres$wydatki)
+Wydatki_vipów <- df %>%
+  group_by(czy_vip) %>%
+  summarise(średnie_wydatki = mean(wydatki),
+            na_pokoje = mean(RoomService),
+            na_jedzenie = mean(FoodCourt),
+            na_zakupy = mean(ShoppingMall),
+            na_SPA = mean(Spa),
+            na_VR= mean(VRDeck))
+Wydatki_vipów
+Wydatki_planet <- df %>%
+  group_by(HomePlanet) %>%
+  summarise(Średnie_wydatki = mean(wydatki),
+            na_pokoje = mean(RoomService),
+            na_jedzenie = mean(FoodCourt),
+            na_zakupy = mean(ShoppingMall),
+            na_SPA = mean(Spa),
+            na_VR= mean(VRDeck))
+Wydatki_wywalonych <- df %>%
+  group_by(Transported) %>%
+  summarise(Średnie_wydatki = mean(wydatki),
+            na_pokoje = mean(RoomService),
+            na_jedzenie = mean(FoodCourt),
+            na_zakupy = mean(ShoppingMall),
+            na_SPA = mean(Spa),
+            na_VR= mean(VRDeck))
+
+```
+
+
